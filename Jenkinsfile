@@ -29,6 +29,8 @@ pipeline {
                     rm -rf dist
                     rm -rf build
                     rm -rf *.egg-info
+                    rm -f gunicorn.pid
+                    rm -f access.log
                     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
                     find . -name "*.pyc" -delete 2>/dev/null || true
                 '''
@@ -78,7 +80,7 @@ pipeline {
             steps {
                 echo '========== Deploying the Application =========='
                 sh '''
-                    # Step 1 - Kill OLD gunicorn PROCESS (not binary!)
+                    # Step 1 - Kill OLD gunicorn PROCESS
                     echo "--- Stopping old gunicorn process ---"
                     pkill -f "gunicorn" || true
                     sleep 2
@@ -86,22 +88,19 @@ pipeline {
                     # Step 2 - Set workspace path
                     WORKSPACE_DIR=$(pwd)
 
-                    # Step 3 - Start NEW gunicorn PROCESS using venv binary
-                    echo "--- Starting new gunicorn process ---"
+                    # Step 3 - Start gunicorn as daemon detached from Jenkins
+                    echo "--- Starting gunicorn detached from Jenkins ---"
+                    JENKINS_NODE_COOKIE=dontKillMe \
                     nohup $WORKSPACE_DIR/venv/bin/gunicorn \
-                        -w 2 \
-                        -b 0.0.0.0:5000 \
-                        app.main:app \
-                        --chdir $WORKSPACE_DIR > $WORKSPACE_DIR/app.log 2>&1 &
+                	-w 2 \
+               	 	-b 0.0.0.0:5000 \
+                	app.main:app \
+                	--chdir $WORKSPACE_DIR >> $WORKSPACE_DIR/app.log 2>&1 &
 
                     # Step 4 - Wait for process to boot
                     sleep 5
 
-                    # Step 5 - Check logs
-                    echo "--- App Logs ---"
-                    cat $WORKSPACE_DIR/app.log || true
-
-                    # Step 6 - Test app is responding
+                    # Step 5 - Test app is responding
                     echo "--- Testing App ---"
                     curl -s http://localhost:5000 && echo "✅ App is UP!" || echo "❌ App not responding"
                 '''
