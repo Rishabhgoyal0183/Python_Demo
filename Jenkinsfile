@@ -40,13 +40,26 @@ pipeline {
             steps {
                 echo '========== Building the Application =========='
                 sh '''
+                    # Step 1 - Create fresh virtual environment
                     python3 -m venv venv
+
+                    # Step 2 - Activate venv
                     . venv/bin/activate
+
+                    # Step 3 - Install all dependencies + gunicorn
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    pip install pytest build
+                    pip install pytest build gunicorn
+
+                    # Step 4 - Confirm gunicorn binary exists on disk
+                    echo "--- Verifying gunicorn binary ---"
+                    ls -la venv/bin/gunicorn
+
+                    # Step 5 - Run Tests
                     echo "--- Running Tests ---"
                     pytest tests/ -v --junitxml=test-results.xml
+
+                    # Step 6 - Build Package
                     echo "--- Building Package ---"
                     python3 -m build
                 '''
@@ -65,36 +78,35 @@ pipeline {
             steps {
                 echo '========== Deploying the Application =========='
                 sh '''
-                    # Kill old gunicorn if running
+                    # Step 1 - Kill OLD gunicorn PROCESS (not binary!)
+                    echo "--- Stopping old gunicorn process ---"
                     pkill -f "gunicorn" || true
                     sleep 2
 
-                    # Set workspace path
+                    # Step 2 - Set workspace path
                     WORKSPACE_DIR=$(pwd)
 
-                    # Start app using venv gunicorn directly
+                    # Step 3 - Start NEW gunicorn PROCESS using venv binary
+                    echo "--- Starting new gunicorn process ---"
                     nohup $WORKSPACE_DIR/venv/bin/gunicorn \
                         -w 2 \
                         -b 0.0.0.0:5000 \
                         app.main:app \
                         --chdir $WORKSPACE_DIR > $WORKSPACE_DIR/app.log 2>&1 &
 
-                    # Wait for app to start
+                    # Step 4 - Wait for process to boot
                     sleep 5
 
-                    # Check logs
+                    # Step 5 - Check logs
                     echo "--- App Logs ---"
                     cat $WORKSPACE_DIR/app.log || true
 
-                    # Test if app is responding
+                    # Step 6 - Test app is responding
                     echo "--- Testing App ---"
-                    curl -s http://localhost:5000 && echo "App is UP!" || echo "App not responding"
-
-                    echo "Done!"
+                    curl -s http://localhost:5000 && echo "✅ App is UP!" || echo "❌ App not responding"
                 '''
             }
         }
-
     }
 
     post {
