@@ -62,20 +62,36 @@ pipeline {
         }
 
         stage('Deploy') {
-            steps {
-                echo '========== Deploying the Application =========='
-                sh '''
-                    pkill -f "gunicorn" || true
-                    sleep 2
-                    . venv/bin/activate
-                    nohup gunicorn -w 2 -b 0.0.0.0:5000 app.main:app > app.log 2>&1 &
-                    sleep 3
-                    echo "--- Checking if app is running ---"
-                    ps aux | grep gunicorn
-                    echo "App deployed at http://$(curl -s ifconfig.me):5000"
-                '''
-            }
-        }
+    steps {
+        echo '========== Deploying the Application =========='
+        sh '''
+            # Kill any old running instance
+            pkill -f "gunicorn" || true
+            sleep 2
+
+            # Use gunicorn FROM INSIDE venv (not system gunicorn)
+            WORKSPACE_DIR=$(pwd)
+
+            # Start app using venv's guxnicorn directly with full path
+            nohup $WORKSPACE_DIR/venv/bin/gunicorn \
+                -w 2 \
+                -b 0.0.0.0:5000 \
+                app.main:app \
+                --chdir $WORKSPACE_DIR > $WORKSPACE_DIR/app.log 2>&1 &
+
+            sleep 3
+
+            # Verify it started
+            echo "--- Checking if app is running ---"
+            ps aux | grep gunicorn | grep -v grep
+
+            # Test the app
+            curl -s http://localhost:5000 || echo "App not responding yet"
+
+            echo "App deployed at http://$(curl -s ifconfig.me):5000"
+        '''
+    }
+}
 
     }
 
