@@ -1,7 +1,9 @@
 from flask import Flask, jsonify
+from flask_cors import CORS          # ← ADD THIS LINE
 
 # Create the Flask application
 app = Flask(__name__)
+CORS(app)                            # ← ADD THIS LINE
 
 # Route 1 - Home page
 @app.route("/")
