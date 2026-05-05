@@ -46,79 +46,61 @@ pipeline {
         }
 
         // ─── STAGE 3 : BUILD ─────────────────────────────────────
-        stage('Build') {
-            steps {
-                echo '========== Building the Application =========='
-                script {
-                        sh '''
-                            # Create fresh virtual environment
-                            python3 -m venv venv
+       stage('Build') {
+    steps {
+        echo '========== Building the Application =========='
+        sh '''
+            # Create fresh virtual environment
+            python3 -m venv venv
 
-                            # Activate and install dependencies
-                            . venv/bin/activate
-                            pip install --upgrade pip
-                            pip install -r requirements.txt
-                            pip install pytest build
+            # Activate and install dependencies
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install pytest build
 
-                            # Run Tests
-                            echo "--- Running Tests ---"
-                            pytest tests/ -v --junitxml=test-results.xml
+            # Run Tests
+            echo "--- Running Tests ---"
+            pytest tests/ -v --junitxml=test-results.xml
 
-                            # Build the package
-                            echo "--- Building Package ---"
-                            python -m build
-                        '''
-                                   }
-                echo 'Build completed!'
-            }
-            post {
-                always {
-                    // Show test results in Jenkins UI
-                    junit 'test-results.xml'
-                }
-                failure {
-                    echo '❌ Build failed! Tests did not pass. Stopping deployment.'
-                }
-            }
+            # Build Package
+            echo "--- Building Package ---"
+            python3 -m build
+        '''
+    }
+    post {
+        always {
+            junit 'test-results.xml'
         }
+        failure {
+            echo '❌ Tests failed! Stopping deployment.'
+        }
+    }
+}
 
         // ─── STAGE 4 : DEPLOY ────────────────────────────────────
         stage('Deploy') {
-            steps {
-                echo '========== Deploying the Application =========='
-                script {
-                       sh '''
-                            # Stop any old running instance
-                            pkill -f "gunicorn" || true
+    steps {
+        echo '========== Deploying the Application =========='
+        sh '''
+            # Kill any old running instance
+            pkill -f "gunicorn" || true
 
-                            # Activate venv
-                            . venv/bin/activate
+            # Wait 2 seconds
+            sleep 2
 
-                            # Install gunicorn (production server)
-                            pip install gunicorn
+            # Activate venv
+            . venv/bin/activate
 
-                            # Start the app
-                            nohup gunicorn -w 2 -b 0.0.0.0:${DEPLOY_PORT} app.main:app > app.log 2>&1 &
+            # Start app with gunicorn in background
+            nohup gunicorn -w 2 -b 0.0.0.0:5000 app.main:app > app.log 2>&1 &
 
-                            echo "App deployed and running on port ${DEPLOY_PORT}"
-                        '''
-                                    }
-                echo 'Deployment completed!'
-            }
-        }
-
+            # Wait and confirm it started
+            sleep 3
+            echo "--- Checking if app is running ---"
+            ps aux | grep gunicorn
+            echo "App deployed at http://$(curl -s ifconfig.me):5000"
+        '''
     }
-
-    // ─── POST ACTIONS ────────────────────────────────────────────
-    post {
-        success {
-            echo '✅ Pipeline completed! App is live.'
-        }
-        failure {
-            echo '❌ Pipeline failed! Check the logs above.'
-        }
-        always {
-            echo 'Pipeline finished. Check Jenkins dashboard for test results.'
-        }
-    }
+}
 }
