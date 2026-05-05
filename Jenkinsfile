@@ -62,36 +62,38 @@ pipeline {
         }
 
         stage('Deploy') {
-    steps {
-        echo '========== Deploying the Application =========='
-        sh '''
-            # Kill any old running instance
-            pkill -f "gunicorn" || true
-            sleep 2
+            steps {
+                echo '========== Deploying the Application =========='
+                sh '''
+                    # Kill old gunicorn if running
+                    pkill -f "gunicorn" || true
+                    sleep 2
 
-            # Use gunicorn FROM INSIDE venv (not system gunicorn)
-            WORKSPACE_DIR=$(pwd)
+                    # Set workspace path
+                    WORKSPACE_DIR=$(pwd)
 
-            # Start app using venv's guxnicorn directly with full path
-            nohup $WORKSPACE_DIR/venv/bin/gunicorn \
-                -w 2 \
-                -b 0.0.0.0:5000 \
-                app.main:app \
-                --chdir $WORKSPACE_DIR > $WORKSPACE_DIR/app.log 2>&1 &
+                    # Start app using venv gunicorn directly
+                    nohup $WORKSPACE_DIR/venv/bin/gunicorn \
+                        -w 2 \
+                        -b 0.0.0.0:5000 \
+                        app.main:app \
+                        --chdir $WORKSPACE_DIR > $WORKSPACE_DIR/app.log 2>&1 &
 
-            sleep 3
+                    # Wait for app to start
+                    sleep 5
 
-            # Verify it started
-            echo "--- Checking if app is running ---"
-            ps aux | grep gunicorn | grep -v grep
+                    # Check logs
+                    echo "--- App Logs ---"
+                    cat $WORKSPACE_DIR/app.log || true
 
-            # Test the app
-            curl -s http://localhost:5000 || echo "App not responding yet"
+                    # Test if app is responding
+                    echo "--- Testing App ---"
+                    curl -s http://localhost:5000 && echo "App is UP!" || echo "App not responding"
 
-            echo "App deployed at http://$(curl -s ifconfig.me):5000"
-        '''
-    }
-}
+                    echo "Done!"
+                '''
+            }
+        }
 
     }
 
